@@ -25,12 +25,10 @@ class Invoice(ABC):
         self.data_criacao = datetime.now()
         self.vencimento = self.data_criacao + timedelta(days=30)
 
-    @property
     @abstractmethod
     def taxa_juros_diaria(self) -> float:
         pass
 
-    @property
     @abstractmethod
     def taxa_imposto(self) -> float:
         pass
@@ -86,21 +84,18 @@ class Invoice(ABC):
 
 
 class InvoiceInternacional(Invoice):
-    @property
+
     def taxa_juros_diaria(self) -> float:
         return 0.01
 
-    @property
     def taxa_imposto(self) -> float:
         return 0.10
 
 
 class InvoiceNacional(Invoice):
-    @property
     def taxa_juros_diaria(self) -> float:
         return 0.005
 
-    @property
     def taxa_imposto(self) -> float:
         return 0.18
 
@@ -123,11 +118,9 @@ class DecoradorInvoice(Invoice, ABC):
     def __init__(self, invoice: Invoice):
         self._invoice = invoice
 
-    @property
     def taxa_juros_diaria(self) -> float:
         return self._invoice.taxa_juros_diaria
 
-    @property
     def taxa_imposto(self) -> float:
         return self._invoice.taxa_imposto
 
