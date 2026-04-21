@@ -61,10 +61,11 @@ class Cliente(ABC):
         self.id = id
         self.data_contrato = datetime.now()
         self.status = StatusCli.OK
-        self.invoices = []
+        self.invoices: list[Invoice] = []
         self.nome = nome
         self.documento = documento
         self._observer = None
+        self.bloqueado = False
 
     def add_observer(self, observer):
         self._observer = observer
@@ -80,7 +81,13 @@ class Cliente(ABC):
     def tipo_cliente(self) -> str:
         pass
 
-    def compra(self, valor: float):
+    def bloquear_cliente(self):
+        self.bloqueado = True
+
+    def desbloquear_cliente(self):
+        self.bloqueado = False
+
+    def compra(self, valor: float) -> Invoice:
         gera_id = GeraInvId.get_instance()
         inv_id = gera_id.proximo_id()
 
@@ -92,6 +99,7 @@ class Cliente(ABC):
         self.invoices.append(invoice)
         self.alterar_status()
         self.notify("invoice_criada", invoice)
+        return invoice
 
     @abstractmethod
     def pagar(self, metodo: PgtMetodo, valor: float, invoices: list[Invoice], pagador=0):
@@ -134,6 +142,8 @@ class ClienteInternacional(Cliente):
                 pagamento = PagamentoFactory.create(metodo.name, pgt_id, valor, invoices, self)
 
         self.notify("pagamento_criado", pagamento)
+        pagamento.realizar_pagamento()
+        self.alterar_status()
         return pagamento
 
 
@@ -152,6 +162,8 @@ class ClienteNacional(Cliente):
                 pagamento = PagamentoFactory.create(metodo.name, pgt_id, valor, invoices, self)
 
         self.notify("pagamento_criado", pagamento)
+        pagamento.realizar_pagamento()
+        self.alterar_status()
         return pagamento
 
 
@@ -174,3 +186,47 @@ class ClienteFactory:
         cliente.notify("cliente_criado", cliente)
 
         return cliente
+
+class ClienteProxy(Cliente):
+    def __init__(self, cliente_real: Cliente):
+        super().__init__(cliente_real.id, cliente_real.nome, cliente_real.documento)
+        self._cliente_real = cliente_real
+
+    def tipo_cliente(self) -> str:
+        return self._cliente_real.tipo_cliente()
+
+    def compra(self, valor: float) -> Invoice:
+        if self._cliente_real.bloqueado:
+            raise ValueError(
+                f"Cliente {self._cliente_real.id} está bloqueado para compras."
+            )
+        return self._cliente_real.compra(valor)
+
+    def pagar(self, metodo: PgtMetodo, valor: float, invoices: list[Invoice], pagador=0):
+        return self._cliente_real.pagar(metodo, valor, invoices, pagador)
+
+    def listar_invoices(self) -> list[int]:
+        return self._cliente_real.listar_invoices()
+
+    def divida(self) -> float:
+        return self._cliente_real.divida()
+
+    def alterar_status(self):
+        self._cliente_real.alterar_status()
+        self.status = self._cliente_real.status
+
+    def verificar_status(self) -> str:
+        return self._cliente_real.verificar_status()
+
+    def bloquear_cliente(self):
+        self._cliente_real.bloquear_cliente()
+
+    def desbloquear_cliente(self):
+        self._cliente_real.desbloquear_cliente()
+
+
+class FachadaCliente:
+    def pagamento_na_compra(self, cliente: ClienteProxy, valor: float, metodo: PgtMetodo, pagador=0):
+        invoice = cliente.compra(valor)
+        pagamento = cliente.pagar(metodo, valor, [invoice], pagador)
+        return pagamento
