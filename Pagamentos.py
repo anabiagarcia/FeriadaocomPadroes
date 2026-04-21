@@ -12,7 +12,12 @@ class Pagamento(ABC):
         self.valor = valor
         self.parcelas = 0
 
+    def cliente_internacional(self):
+        if self.cliente.tipo_cliente() == "internacional":
+            self.valor = self.valor * 0.03
+
     def validar_pagamento(self):
+        self.cliente_internacional()
         self.taxas()
         valor_final = sum(invoice.consultar_divida() for invoice in self.invoices)
         if valor_final != self.valor:
@@ -113,3 +118,22 @@ class PagamentoAdapter(Pagamento):
 
     def realizar_pagamento(self):
         self._pagamento.realizar_pagamento_terceiro()
+
+class PagamentoFactory:
+    _types = {
+        "PIX": PagamentoPix,
+        "TRANSFERENCIA": PagamentoTransferencia,
+        "TRANSFERENCIA_TERCEIRO": PagamentoAdapter,
+        "CREDITO": PagamentoCredito
+    }
+
+    @staticmethod
+    def create(pagamento_type: str, id: int, valor: float, invoices: list[Invoice], cliente: Cliente, pagador = 0) -> Pagamento:
+        classe = PagamentoFactory._types.get(pagamento_type)
+        if classe is None:
+            raise ValueError("Tipo inválido de pagamento")
+        if pagamento_type == "TRANSFERENCIA_TERCEIRO":
+            pagamento_externo = TransferenciaViaTerceiro(id, valor, invoices, cliente, pagador)
+            return classe(pagamento_externo)
+        else:
+            return classe(id, valor, invoices, cliente)

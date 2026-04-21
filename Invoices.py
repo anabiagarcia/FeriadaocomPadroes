@@ -84,7 +84,6 @@ class Invoice(ABC):
 
 
 class InvoiceInternacional(Invoice):
-
     def taxa_juros_diaria(self) -> float:
         return 0.01
 
@@ -119,10 +118,10 @@ class DecoradorInvoice(Invoice, ABC):
         self._invoice = invoice
 
     def taxa_juros_diaria(self) -> float:
-        return self._invoice.taxa_juros_diaria
+        return self._invoice.taxa_juros_diaria()
 
     def taxa_imposto(self) -> float:
-        return self._invoice.taxa_imposto
+        return self._invoice.taxa_imposto()
 
     @property
     def id(self) -> int:
@@ -157,10 +156,15 @@ class DecoradorInvoice(Invoice, ABC):
     def consultar_status(self) -> str:
         return self._invoice.consultar_status()
 
+    def calcular_imposto(self) -> float:
+        return self._invoice.calcular_imposto()
+
+    def calcular_juros(self) -> float:
+        return self._invoice.calcular_juros()
+
     @abstractmethod
     def consultar_divida(self) -> float:
         pass
-
 
 class AplicarMulta(DecoradorInvoice):
     def consultar_divida(self) -> float:
@@ -171,7 +175,6 @@ class AplicarMulta(DecoradorInvoice):
 
         return divida_base + (self._invoice.valor * 0.2)
 
-#Decorador
 class AplicarDesconto(DecoradorInvoice):
     def consultar_divida(self) -> float:
         divida_base = self._invoice.consultar_divida()

@@ -1,7 +1,15 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
-from Invoices import InvoiceFactory
+from Invoices import InvoiceFactory, Invoice
+from Pagamentos import PagamentoFactory
+from Controle import Sistema
+
+class PgtMetodo(Enum):
+    PIX = 1
+    TRANSFERENCIA = 2
+    TRANSFERENCIA_TERCEIRO = 3
+    CREDITO = 4
 
 
 class StatusCli(Enum):
@@ -9,7 +17,26 @@ class StatusCli(Enum):
     DEVENDO = 2
     CREDITO = 3
 
-#Singleton
+
+class GeraPgtId:
+    _instance = None
+
+    def __init__(self):
+        if GeraPgtId._instance is not None:
+            raise Exception("Use get_instance() ao invés de instanciar diretamente.")
+        self._contador = 0
+
+    @classmethod
+    def get_instance(cls):
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    def proximo_id(self) -> int:
+        self._contador += 1
+        return self._contador
+
+
 class GeraInvId:
     _instance = None
 
@@ -37,23 +64,37 @@ class Cliente(ABC):
         self.invoices = []
         self.nome = nome
         self.documento = documento
+        self._observer = None
+
+    def add_observer(self, observer):
+        self._observer = observer
+
+    def remove_observer(self):
+        self._observer = None
+
+    def notify(self, evento: str, dado):
+        if self._observer is not None:
+            self._observer.update(evento, dado)
 
     @abstractmethod
-    def _tipo_invoice(self) -> str:
+    def tipo_cliente(self) -> str:
         pass
 
     def compra(self, valor: float):
         gera_id = GeraInvId.get_instance()
         inv_id = gera_id.proximo_id()
+
         if valor == 0:
             raise ValueError("O valor deve ser diferente de zero.")
+
         credito = valor < 0
-        invoice = InvoiceFactory.create(self._tipo_invoice(), inv_id, valor, credito)
+        invoice = InvoiceFactory.create(self.tipo_cliente(), inv_id, valor, credito)
         self.invoices.append(invoice)
         self.alterar_status()
+        self.notify("invoice_criada", invoice)
 
     @abstractmethod
-    def pagar(self):
+    def pagar(self, metodo: PgtMetodo, valor: float, invoices: list[Invoice], pagador=0):
         pass
 
     def listar_invoices(self) -> list[int]:
@@ -77,19 +118,41 @@ class Cliente(ABC):
 
 
 class ClienteInternacional(Cliente):
-    def _tipo_invoice(self) -> str:
+    def tipo_cliente(self) -> str:
         return "internacional"
 
-    def pagar(self):
-        pass
+    def pagar(self, metodo: PgtMetodo, valor: float, invoices: list[Invoice], pagador=0):
+        gera_id = GeraPgtId.get_instance()
+        pgt_id = gera_id.proximo_id()
+
+        match metodo:
+            case PgtMetodo.PIX:
+                raise ValueError("Forma de pagamento inválida")
+            case PgtMetodo.TRANSFERENCIA_TERCEIRO:
+                pagamento = PagamentoFactory.create(metodo.name, pgt_id, valor, invoices, self, pagador)
+            case _:
+                pagamento = PagamentoFactory.create(metodo.name, pgt_id, valor, invoices, self)
+
+        self.notify("pagamento_criado", pagamento)
+        return pagamento
 
 
 class ClienteNacional(Cliente):
-    def _tipo_invoice(self) -> str:
+    def tipo_cliente(self) -> str:
         return "nacional"
 
-    def pagar(self):
-        pass
+    def pagar(self, metodo: PgtMetodo, valor: float, invoices: list[Invoice], pagador=0):
+        gera_id = GeraPgtId.get_instance()
+        pgt_id = gera_id.proximo_id()
+
+        match metodo:
+            case PgtMetodo.TRANSFERENCIA_TERCEIRO:
+                pagamento = PagamentoFactory.create(metodo.name, pgt_id, valor, invoices, self, pagador)
+            case _:
+                pagamento = PagamentoFactory.create(metodo.name, pgt_id, valor, invoices, self)
+
+        self.notify("pagamento_criado", pagamento)
+        return pagamento
 
 
 class ClienteFactory:
@@ -103,4 +166,11 @@ class ClienteFactory:
         classe = ClienteFactory._types.get(cliente_type)
         if classe is None:
             raise ValueError("Tipo inválido de Cliente")
-        return classe(id, nome, documento)
+
+        cliente = classe(id, nome, documento)
+
+        sistema = Sistema.acessar_sistema()
+        cliente.add_observer(sistema)
+        cliente.notify("cliente_criado", cliente)
+
+        return cliente

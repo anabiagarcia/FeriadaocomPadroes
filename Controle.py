@@ -53,3 +53,11 @@ class Sistema:
     def valor_em_aberto(self):
         invoices = self.lista_invoices() 
         return sum(invoice.consultar_divida() for invoice in invoices)
+    
+    def update(self, evento: str, dado):
+        if evento == "cliente_criado":
+            self.adicionar_cliente(dado)
+        elif evento == "pagamento_criado":
+            self.adicionar_pagamento(dado)
+        elif evento == "invoice_criada":
+            pass
